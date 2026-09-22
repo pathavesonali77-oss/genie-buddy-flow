@@ -147,9 +147,13 @@ export const renderBatch = createServerFn({ method: "POST" })
     const t0 = Date.now();
     const idx = data.jobs.map((j) => j.index).join(",");
     console.log(`[render] batch START panels ${idx}`);
+    // Staggered starts: firing a whole batch at once is what trips the image
+    // provider's edge throttle on live hosting, where every call leaves from
+    // the same address.
     const results = await Promise.all(
-      data.jobs.map(async (job) => {
+      data.jobs.map(async (job, order) => {
         try {
+          if (order > 0) await new Promise((r) => setTimeout(r, order * 1_200));
           // renderPanel retries the FULL prompt across the whole key pool on
           // fresh seeds; it is never shortened, only softened on a refusal.
 

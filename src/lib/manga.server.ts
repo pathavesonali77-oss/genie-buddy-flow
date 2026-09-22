@@ -2307,9 +2307,14 @@ export async function generateImage(
       return null;
     });
     if (url) return url;
-    // The shared gate supplies any long provider cooldown; this only yields
-    // between ordinary retries.
-    await pause(100);
+    // A throttled call must back off, not bounce straight back. Ordinary
+    // failures still retry almost immediately.
+    const throttled = /\b429\b|1015|rate limit|too many requests/i.test(lastErr);
+    await pause(
+      throttled
+        ? Math.min(20_000, 2_000 * 2 ** attempt) + Math.floor(Math.random() * 800)
+        : 100,
+    );
   }
   throw new Error(`Image generation failed: ${lastErr}`);
 }
