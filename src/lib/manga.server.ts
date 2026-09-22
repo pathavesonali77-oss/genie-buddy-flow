@@ -2528,3 +2528,48 @@ export async function renderPanel(
 }
 
 
+
+/* ------------------------------------------------------------------ */
+/* Browser-side rendering support                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Builds the FINAL image prompts for one timestamp so the picture request can
+ * be made by the browser itself.
+ *
+ * Live hosting sends every server call from one shared address, and the
+ * picture service's edge throttles that address ("error code: 1015") no matter
+ * which key is used. Drawing from the visitor's own connection removes that
+ * shared address from the path entirely, so all the prompt work stays here and
+ * only the HTTP call moves.
+ *
+ * The returned ladder is the same wording ladder the server ladder used:
+ * full prompt, softened wording, plainest wording.
+ */
+export function panelPromptLadder(
+  written: string,
+  bible?: string,
+  line?: string,
+  timestamp?: string,
+  continuity?: string,
+  duration?: number,
+): { display: string; ladder: string[] } {
+  const span = /(-?\d+(?:\.\d+)?)s?\s*-\s*(-?\d+(?:\.\d+)?)s?/.exec(timestamp ?? "");
+  const seconds =
+    duration ?? (span ? Math.max(0, Number(span[2]) - Number(span[1])) : undefined);
+  const plan = parsePanelPlan(written, seconds, line);
+  const body = plan.body;
+  const softened = promptVariant(body, 1, line);
+  const plain = sanitizePrompt(softened || body)
+    .replace(/["'“”‘’]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 900);
+
+  const wordings = [body];
+  if (softened && softened !== body) wordings.push(softened);
+  if (plain.length >= 20 && plain !== softened && plain !== body) wordings.push(plain);
+
+  const ladder = wordings.map((w) => composeImagePrompt(w, bible, line, continuity, plan));
+  return { display: body, ladder };
+}
