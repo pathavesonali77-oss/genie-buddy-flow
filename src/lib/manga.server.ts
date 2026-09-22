@@ -2281,11 +2281,17 @@ export async function generateImage(
         } else {
           const responseText = await res.text().catch(() => "");
           lastErr = `${res.status} ${responseText}`.slice(0, 300);
-          if (res.status === 429 || /error code:?\s*1015|rate limit|too many requests/i.test(responseText)) {
+          const edgeBlock = /error code:?\s*1015/i.test(responseText);
+          if (res.status === 429 || edgeBlock || /rate limit|too many requests/i.test(responseText)) {
             const retryAfter = Number(res.headers.get("retry-after"));
             reportImageRateLimit(
               key,
-              Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 15_000,
+              Number.isFinite(retryAfter) && retryAfter > 0
+                ? retryAfter * 1_000
+                : edgeBlock
+                  ? 20_000
+                  : 15_000,
+              edgeBlock,
             );
           }
         }
@@ -2301,9 +2307,14 @@ export async function generateImage(
       return null;
     });
     if (url) return url;
-    // The shared gate supplies any long provider cooldown; this only yields
-    // between ordinary retries.
-    await pause(100);
+    // A throttled call must back off, not bounce straight back. Ordinary
+    // failures still retry almost immediately.
+    const throttled = /\b429\b|1015|rate limit|too many requests/i.test(lastErr);
+    await pause(
+      throttled
+        ? Math.min(20_000, 2_000 * 2 ** attempt) + Math.floor(Math.random() * 800)
+        : 100,
+    );
   }
   throw new Error(`Image generation failed: ${lastErr}`);
 }

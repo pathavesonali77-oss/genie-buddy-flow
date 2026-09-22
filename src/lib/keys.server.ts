@@ -85,15 +85,39 @@ export function imageKeyStartIndex(slot: number, attempt: number, keyCount: numb
  */
 const restingUntil = new Map<string, number>();
 
-/** Parks ONLY the key that actually hit 429 / Cloudflare 1015. */
-export function reportImageRateLimit(key: string, retryAfterMs = 15_000): void {
-  if (!key) return;
-  restingUntil.set(key, Date.now() + Math.max(1_000, Math.min(60_000, retryAfterMs)));
+/**
+ * Cloudflare's "error code: 1015" in front of the image provider is an EDGE
+ * block on the calling network, not on the credential. Live hosting sends every
+ * call from a shared egress address, so once 1015 appears, swapping keys just
+ * burns more blocked requests — every key is blocked at the same time. That is
+ * why the problem only shows up on the live site and never in the dev sandbox,
+ * which has its own address and its own allowance.
+ *
+ * So a 1015 parks ALL keys for a short while and the next request waits it out
+ * instead of hammering through it.
+ */
+let globalCooldownUntil = 0;
+
+/** Milliseconds every key must stay idle right now (0 when clear). */
+export function imageCooldownRemaining(): number {
+  return Math.max(0, globalCooldownUntil - Date.now());
+}
+
+/** Parks the key that hit 429, and every key when the block is an edge 1015. */
+export function reportImageRateLimit(
+  key: string,
+  retryAfterMs = 15_000,
+  edgeBlock = false,
+): void {
+  const ms = Math.max(1_000, Math.min(90_000, retryAfterMs));
+  if (key) restingUntil.set(key, Date.now() + ms);
+  if (edgeBlock) globalCooldownUntil = Math.max(globalCooldownUntil, Date.now() + ms);
 }
 
 /** Insta Kill: forget every cooldown, nothing is drawing any more. */
 export function releaseAllImageKeys(): void {
   restingUntil.clear();
+  globalCooldownUntil = 0;
 }
 
 registerKillHook(releaseAllImageKeys);
@@ -112,6 +136,14 @@ export async function withImageKey<T>(
   fn: (key: string, keyIndex: number) => Promise<T>,
 ): Promise<T> {
   assertActive();
+  // Sit out an edge block instead of spending more blocked calls on it. The
+  // wait is short and interruptible so a killed run never lingers here.
+  for (let waited = 0; waited < 30_000; waited += 250) {
+    const left = imageCooldownRemaining();
+    if (left <= 0) break;
+    assertActive();
+    await new Promise((r) => setTimeout(r, Math.min(250, left)));
+  }
   const keys = agnesKeys();
   const preferred = imageKeyStartIndex(slot, attempt, keys.length);
   const now = Date.now();
