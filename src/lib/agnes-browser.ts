@@ -148,13 +148,14 @@ async function drawOne(
 
 /** Same answer shape as the old server batch, drawn from the page instead. */
 export async function renderBatchInBrowser(args: {
-  data: { bible?: string; jobs: ImageJob[] };
+  data: { bible?: string; jobs: ImageJob[]; runAt?: number };
   signal?: AbortSignal;
 }): Promise<{ results: ImageResult[] }> {
   const { bible, jobs } = args.data;
   const payloads = (await panelPayloads({
     data: {
       bible,
+      runAt: args.data.runAt,
       jobs: jobs.map((j) => ({
         index: j.index,
         prompt: j.prompt,
@@ -187,12 +188,14 @@ export async function renderImageInBrowser(args: {
     timestamp?: string;
     slot?: number;
     continuity?: string;
+    runAt?: number;
   };
   signal?: AbortSignal;
 }): Promise<{ url: string; prompt: string; rewritten: boolean }> {
   const { results } = await renderBatchInBrowser({
     data: {
       bible: args.data.bible,
+      runAt: args.data.runAt,
       jobs: [
         {
           index: 0,
