@@ -5,6 +5,7 @@ import { parseScript } from "./script";
 import {
   buildCharacterBible,
   normalizeLeadCharacter,
+  panelPromptLadder,
   writePrompts,
   renderPanel,
 } from "./manga.server";
@@ -77,6 +78,45 @@ export const promptsForRange = createServerFn({ method: "POST" })
       const prompts = await writePrompts(data.bible, data.segments, data.from, data.to);
       return { from: data.from, to: data.to, prompts, engine: engineStatus() };
     }, signal);
+  });
+
+/**
+ * Finishes the provider-ready wording while keeping the actual Agnes request
+ * in the visitor's browser. This avoids the live host's shared outgoing IP.
+ */
+export const panelPayloads = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        bible: z.string().optional(),
+        jobs: z
+          .array(
+            z.object({
+              index: z.number().int(),
+              prompt: z.string().min(5),
+              line: z.string().optional(),
+              timestamp: z.string().optional(),
+              continuity: z.string().max(400).optional(),
+            }),
+          )
+          .min(1)
+          .max(10),
+        runAt: z.number().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const payloads = data.jobs.map((job) => ({
+      index: job.index,
+      ...panelPromptLadder(
+        job.prompt,
+        data.bible,
+        job.line,
+        job.timestamp,
+        job.continuity,
+      ),
+    }));
+    return { payloads };
   });
 
 export const renderImage = createServerFn({ method: "POST" })

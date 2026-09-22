@@ -7,3 +7,4 @@
 - [x] Cap live image concurrency independently of server-isolate memory
 - [x] Add focused scheduler regression coverage
 - [x] Verify rendering, metadata, and mobile layout
+- [x] Send Agnes image generation directly from the browser to bypass the live host's shared address

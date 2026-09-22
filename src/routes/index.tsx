@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { analyzeScript, renderImage, renderBatch } from "@/lib/manga.functions";
+import { analyzeScript } from "@/lib/manga.functions";
+import { renderBatchInBrowser, renderImageInBrowser } from "@/lib/agnes-browser";
 
 import { buildTimeline, fmt, scriptEndTime, type Segment } from "@/lib/script";
 import { buildVideo, webCodecsSupported } from "@/lib/video";
@@ -112,19 +113,16 @@ const PROMPT_RANGE = 15;
 
 
 /**
- * Image pipeline shape: one paced queue, rotating Agnes keys, and one model
- * (agnes-image-2.5-flash). Live hosting can place each server call in a fresh
- * isolate, so server-memory leases cannot enforce a shared concurrency limit.
- * Keep the authoritative limit here, where one browser owns the whole run.
+ * Image pipeline shape: one browser-owned queue, rotating Agnes keys, and one
+ * model (agnes-image-2.5-flash). Image calls leave from the visitor's own
+ * connection and never pass through the live host's shared outgoing address.
  *
  * Six at a time with a short start gap: the nine keys were measured drawing
  * nine panels simultaneously with no rate limiting at all, so the old
  * three-at-a-time / four-second-gap pacing was throttling the run roughly ten
  * times harder than the provider ever asked for.
  */
-// Live hosting calls the picture service from a shared address, and that
-// address — not the account — is what gets throttled ("error code: 1015").
-// Three lanes keep the whole run under that ceiling while still drawing fast.
+// Three lanes keep the free image service responsive while a long run draws.
 const IMAGE_CONCURRENCY = 3;
 const IMAGE_BATCH = 1;
 /** Pace starts as well as limiting in-flight work, avoiding shared-edge 1015 bursts. */
@@ -399,8 +397,8 @@ function Index() {
   useSwallowCancellations();
   const analyze = useServerFn(analyzeScript);
 
-  const draw = useServerFn(renderImage);
-  const drawBatch = useServerFn(renderBatch);
+  const draw = renderImageInBrowser;
+  const drawBatch = renderBatchInBrowser;
   const killRuns = useServerFn(instaKill);
 
   const [script, setScript] = useState("");

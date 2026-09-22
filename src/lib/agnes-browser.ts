@@ -51,9 +51,9 @@ export type ImageJob = {
   prompt: string;
   seed: number;
   slot?: number;
-  line?: string;
-  timestamp?: string;
-  continuity?: string;
+  line?: string | undefined;
+  timestamp?: string | undefined;
+  continuity?: string | undefined;
 };
 
 export type ImageResult = {
@@ -148,13 +148,14 @@ async function drawOne(
 
 /** Same answer shape as the old server batch, drawn from the page instead. */
 export async function renderBatchInBrowser(args: {
-  data: { bible?: string; jobs: ImageJob[] };
+  data: { bible?: string | undefined; jobs: ImageJob[]; runAt?: number | undefined };
   signal?: AbortSignal;
 }): Promise<{ results: ImageResult[] }> {
   const { bible, jobs } = args.data;
-  const payloads = (await panelPayloads({
+  const payloadRequest = {
     data: {
       bible,
+      runAt: args.data.runAt,
       jobs: jobs.map((j) => ({
         index: j.index,
         prompt: j.prompt,
@@ -163,8 +164,11 @@ export async function renderBatchInBrowser(args: {
         continuity: j.continuity,
       })),
     },
-    signal: args.signal,
-  })) as { payloads: { index: number; display: string; ladder: string[] }[] };
+    ...(args.signal ? { signal: args.signal } : {}),
+  };
+  const payloads = (await panelPayloads(payloadRequest)) as {
+    payloads: { index: number; display: string; ladder: string[] }[];
+  };
 
   const results = await Promise.all(
     jobs.map(async (job) => {
@@ -182,17 +186,19 @@ export async function renderImageInBrowser(args: {
   data: {
     prompt: string;
     seed: number;
-    bible?: string;
-    line?: string;
-    timestamp?: string;
+    bible?: string | undefined;
+    line?: string | undefined;
+    timestamp?: string | undefined;
     slot?: number;
-    continuity?: string;
+    continuity?: string | undefined;
+    runAt?: number;
   };
   signal?: AbortSignal;
 }): Promise<{ url: string; prompt: string; rewritten: boolean }> {
-  const { results } = await renderBatchInBrowser({
+  const request = {
     data: {
       bible: args.data.bible,
+      runAt: args.data.runAt,
       jobs: [
         {
           index: 0,
@@ -204,8 +210,9 @@ export async function renderImageInBrowser(args: {
         },
       ],
     },
-    signal: args.signal,
-  });
+    ...(args.signal ? { signal: args.signal } : {}),
+  };
+  const { results } = await renderBatchInBrowser(request);
   const first = results[0];
   if (!first?.url) throw new Error(first?.error ?? "Image generation failed");
   return { url: first.url, prompt: first.prompt ?? args.data.prompt, rewritten: !!first.rewritten };
