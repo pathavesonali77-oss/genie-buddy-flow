@@ -148,7 +148,7 @@ async function drawOne(
 
 /** Same answer shape as the old server batch, drawn from the page instead. */
 export async function renderBatchInBrowser(args: {
-  data: { bible?: string; jobs: ImageJob[]; runAt?: number };
+  data: { bible?: string | undefined; jobs: ImageJob[]; runAt?: number | undefined };
   signal?: AbortSignal;
 }): Promise<{ results: ImageResult[] }> {
   const { bible, jobs } = args.data;
