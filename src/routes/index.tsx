@@ -122,7 +122,10 @@ const PROMPT_RANGE = 15;
  * three-at-a-time / four-second-gap pacing was throttling the run roughly ten
  * times harder than the provider ever asked for.
  */
-const IMAGE_CONCURRENCY = 6;
+// Live hosting calls the picture service from a shared address, and that
+// address — not the account — is what gets throttled ("error code: 1015").
+// Three lanes keep the whole run under that ceiling while still drawing fast.
+const IMAGE_CONCURRENCY = 3;
 const IMAGE_BATCH = 1;
 /** Pace starts as well as limiting in-flight work, avoiding shared-edge 1015 bursts. */
 const IMAGE_START_GAP_MS = 800;

@@ -2281,11 +2281,17 @@ export async function generateImage(
         } else {
           const responseText = await res.text().catch(() => "");
           lastErr = `${res.status} ${responseText}`.slice(0, 300);
-          if (res.status === 429 || /error code:?\s*1015|rate limit|too many requests/i.test(responseText)) {
+          const edgeBlock = /error code:?\s*1015/i.test(responseText);
+          if (res.status === 429 || edgeBlock || /rate limit|too many requests/i.test(responseText)) {
             const retryAfter = Number(res.headers.get("retry-after"));
             reportImageRateLimit(
               key,
-              Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 15_000,
+              Number.isFinite(retryAfter) && retryAfter > 0
+                ? retryAfter * 1_000
+                : edgeBlock
+                  ? 20_000
+                  : 15_000,
+              edgeBlock,
             );
           }
         }
