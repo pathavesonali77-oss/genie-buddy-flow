@@ -195,7 +195,7 @@ export async function renderImageInBrowser(args: {
   };
   signal?: AbortSignal;
 }): Promise<{ url: string; prompt: string; rewritten: boolean }> {
-  const { results } = await renderBatchInBrowser({
+  const request = {
     data: {
       bible: args.data.bible,
       runAt: args.data.runAt,
@@ -210,8 +210,9 @@ export async function renderImageInBrowser(args: {
         },
       ],
     },
-    signal: args.signal,
-  });
+    ...(args.signal ? { signal: args.signal } : {}),
+  };
+  const { results } = await renderBatchInBrowser(request);
   const first = results[0];
   if (!first?.url) throw new Error(first?.error ?? "Image generation failed");
   return { url: first.url, prompt: first.prompt ?? args.data.prompt, rewritten: !!first.rewritten };
